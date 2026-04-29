@@ -1,0 +1,1415 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+   <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+   <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
+   <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
+   <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+   <script>
+
+      function createArrayOfRankings(n) {
+         return Array.from({ length: n }, (_, i) => i + 1);
+      }
+
+      function getPriority(a) {
+         var priorityArray = {}
+
+         const listItems = document.querySelectorAll('#sortable li input');
+         const listArray = Array.from(listItems);
+         const textArray = listArray.map(item => item.id);
+         var ignoreIndex = textArray.indexOf("ignore-break");
+
+         console.log(ignoreIndex);
+
+         console.log(textArray)
+
+         // var priorityRankings = [1, 2, 3, 4, 5, 6, 7]
+         var priorityRankings = createArrayOfRankings(listItems.length)// automatically sets rankings based on the number of priorities
+
+         // ignore items below the ignore break and set their weight to 0
+         for (let i = 0; i < priorityRankings.length; i++) {
+            if (i >= ignoreIndex) {
+               priorityRankings[i] = 0; // Replace the value with its index if it's greater
+            }
+         }
+         // reverse order so the highest priority gets the highest rank
+         priorityRankings = priorityRankings.sort((a,b) => b - a);
+         console.log(priorityRankings)
+
+         // sum all rankings to calculate weights
+         function sumArrayReduce(arr) {
+            return arr.reduce((accumulator, currentValue) => accumulator + currentValue, 0);
+         }
+         const priorityTotal = sumArrayReduce(priorityRankings)
+         const priorityWeights = priorityRankings.map(function (rank) {
+            return +(rank / priorityTotal).toFixed(2)
+         })
+         
+         const zipArray = Object.fromEntries(textArray.map((key, index) =>
+            [key, priorityWeights[index]]));
+         // console.log(zipArray);
+         for (var key in zipArray) {
+            // console.log(key);
+            var keyPriority = document.getElementById(key);
+            keyPriority.value = zipArray[key];
+            keyPriority.dispatchEvent(new Event('input', { bubbles: true }));
+         }
+         return zipArray;
+      }
+
+   </script>
+   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
+      integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+</head>
+<style>
+   .row {
+      width: 100%;
+      text-align: center;
+   }
+
+   .block {
+      display: inline-block;
+   }
+
+   ​.card {
+      /* Add shadows to create the "card" effect */
+      box-shadow: 0 4px 4px 0 rgba(0, 0, 0, 0.2);
+      transition: 0.3s;
+   }
+
+   /* On mouse-over, add a deeper shadow */
+   .card:hover {
+      box-shadow: 0 4px 4px 0 rgba(0, 0, 0, 0.2);
+   }
+
+   .slider-labels {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 5px;
+   }
+
+   .sortable {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+   }
+
+   .sortable li {
+      width: 75%;
+   }
+
+   ul {
+      padding-left: 0;
+   }
+
+
+   /* .vega-bind { position: absolute; right: 100px; top: 15px; } */
+</style>
+
+<body>
+   <div class="row">
+      <div class="block" style="width: 30%; padding-left: 15px;">
+         <div class="col">
+            <h2>Which market are you interested in?</h2>
+            <ul class="list-group" style="max-width: 20rem; margin: auto;">
+            <li class="list-group-item">
+               <input class="form-check-input me-1" type="radio" name="listGroupRadio" value="" id="secondRadio"
+                  onClick="clicked(event)" checked>
+               <label class="form-check-label" for="secondRadio">Soil Improvement Co-products</label>
+            </li>
+               <li class="list-group-item">
+                  <input class="form-check-input me-1" type="radio" name="listGroupRadio" value="" id="secondRadio"
+                     onClick="clicked(event)">
+                  <label class="form-check-label" for="secondRadio">Biochar Co-products</label>
+               </li>
+            </ul>
+            <p id="marketDesc"></p>
+         </div>
+      </div>
+      <div class="block" style="width: 70%;">
+         <h2>Which region are you interested in?</h2>
+         <div id="vis"></div>
+      </div>
+   </div>
+   <div class="row">
+
+      <div class="block" style="width: 25%; padding-left: 15px;">
+         <div class="col">
+            <h4>Priorities</h4>
+            <h6>Select a prioritization method below</h6>
+            <ul class="list-group" style="max-width: 20rem; margin: auto;">
+               <li class="list-group-item">
+                  <input class="form-check-input me-1" type="radio" name="listGroupRadio2" value="" id="thirdRadio"
+                     onClick="clickedMethod(event)" checked>
+                  <label class="form-check-label" for="thirdRadio">Weighted scoring prioritization</label>
+               </li>
+               <li class="list-group-item">
+                  <input class="form-check-input me-1" type="radio" name="listGroupRadio2" value="" id="fourthRadio"
+                     onClick="clickedMethod(event)">
+                  <label class="form-check-label" for="fourthRadio">Promethee</label>
+               </li>
+            </ul>
+            <h6>Click and drag to rank priorities from highest to lowest. Drag items below '-Excluded-' to exclude them from prioritization</h6>
+            <ul id="sortable">
+               <li class="card m-1"><input type="hidden" id="potential-range" value="0.25">Energy Potential</li>
+               <li class="card m-1"><input type="hidden" id="air-range" value="0.21">Air Quality</li>
+               <li class="card m-1"><input type="hidden" id="water-range" value="0.18">Water Quality</li>
+               <li class="card m-1"><input type="hidden" id="res-range" value="0.14">Security</li>
+               <li class="card m-1"><input type="hidden" id="efficiency-range" value="0.11">Efficiency</li>
+               <li class="card m-1"><input type="hidden" id="profit-range" value="0.07">Profitability</li>
+               <li ><input type="hidden" id="ignore-break" value=""><b>-Excluded-</b></li>
+            </ul>
+         </div>
+      </div>
+      <div class="block" style="width: 50%;">
+         <h4><span id="val">Select a region</span></h4>
+         <div id="radar_vis"></div>
+      </div>
+      <div class="block" style="width: 25%;">
+         <h4>Production per SQMI</h4>
+         <div id="chart_vis"></div>
+      </div>
+   </div>
+
+   <script>
+      const list = document.getElementById('sortable');
+      new Sortable(list, {
+         animation: 150,
+         ghostClass: 'blue-background-class',
+         onUpdate: function (evt) {
+            priorityArray = getPriority()
+            console.log(priorityArray)
+         }
+      });
+
+      var source_url = './static/data/es_test_v4.csv'
+
+      var source_desc = "This scenario applies a regional mechanism in POLYSYS to adjust soil carbon storage from switchgrass based on local baseline levels. It tests how soil improvements in the region, combined with market payments, could change the economics of biomass supply."
+      const desc_element = document.getElementById("marketDesc");
+      desc_element.textContent = source_desc
+
+      function clicked(event) {
+         var id = event.target.id,
+            first = 'firstRadio',
+            second = 'secondRadio'
+         if (id === first) {
+            source_url = './static/data/es_test_v4.csv'
+            source_desc = "This scenario applies a regional mechanism in POLYSYS to adjust soil carbon storage from switchgrass based on local baseline levels. It tests how soil improvements in the region, combined with market payments, could change the economics of biomass supply."
+         } else if (id === second) {
+            source_url = './static/data/es_test_v6.csv'
+            source_desc = "This scenario compares national deployment of woody crops to a Southeast-focused case where biochar is returned to soils, boosting yields. It tests how soil improvements and market payments could change the economics of biomass supply."
+         }
+         desc_element.textContent = source_desc
+         genVisualization()
+         return source_url
+      }
+
+      const query_url2 = 'static/data/counties_data_all.csv'
+      const query_url3 = 'static/data/us-10m.json'
+      const query_url4 = 'static/data/usda_regions_v1.json'
+
+      function genVisualization() {
+         Promise.all([
+            d3.csv(source_url),
+            d3.csv(query_url2),
+            d3.json(query_url3),
+            d3.json(query_url4)
+         ]).then(function ([dataset1, dataset2, dataset3, dataset4]) {
+
+            priorityArray = getPriority();
+            // console.log(priorityArray)
+
+            function getVar(a) {
+               console.log(a.querySelector(".subclass_element").innerText);
+            };
+
+            const val = document.getElementById('val');
+            var spec = {
+               "$schema": "https://vega.github.io/schema/vega/v5.json",
+               "description": "US map of usda regions showing production of select crops.",
+               "width": 650,
+               "height": 500,
+
+               "signals": [
+                  {
+                     "name": "bind_region",
+                     "value": null,
+                     "on": [
+                        {
+                           "events": "@mark_regions:click",
+                           "update": "datum.properties.region",
+                           "force": true
+                        },
+                        {
+                           "events": "pointerup[!event.item]",
+                           "update": "null"
+                        }
+                     ]
+                  },
+                  {
+                     "name": "bind_county",
+                     "value": null,
+                     "on": [
+                        {
+                           "events": "@mark_counties:click",
+                           "update": "datum.fips",
+                           "force": true
+                        },
+                        {
+                           "events": "pointerup[!event.item], @mark_regions:click",
+                           "update": "null"
+                        }
+                     ]
+                  },
+                  {
+                     "name": "bind_air",
+                     "bind": {
+                        "element": "#air-range"
+                     }
+                  },
+                  {
+                     "name": "bind_water",
+                     "bind": {
+                        "element": "#water-range"
+                     }
+                  },
+                  {
+                     "name": "bind_potential",
+                     "bind": {
+                        "element": "#potential-range"
+                     }
+                  },
+                  {
+                     "name": "bind_efficiency",
+                     "bind": {
+                        "element": "#efficiency-range"
+                     }
+                  },
+                  {
+                     "name": "bind_profit",
+                     "bind": {
+                        "element": "#profit-range"
+                     }
+                  },
+                  {
+                     "name": "bind_resiliency",
+                     "bind": {
+                        "element": "#res-range"
+                     }
+                  },
+                  {
+                     "name": "bind_prosperity",
+                     "value": 0
+                  },
+                  {
+                     "name": "total_weights",
+                     "update": "toNumber(bind_air) + toNumber(bind_water) + toNumber(bind_potential) + toNumber(bind_efficiency) + toNumber(bind_profit) + toNumber(bind_resiliency) + toNumber(bind_prosperity)"
+                  },
+                  {
+                     "name": "metric",
+                     "value": "Production (per sqmi)",
+                     "bind": {
+                        "input": "select",
+                        "name": "Metric: ",
+                        "options": [
+                           "Production (per sqmi)",
+                           "Energy Potential", 
+                           "Air Quality",
+                           "Water Quality", 
+                           "Security", 
+                           // "Rural Prosperity",
+                           "Efficiency", 
+                           "Profitability"
+                        ]
+                     }
+                  },
+                  {
+                     "name": "value_array",
+                     "update": "extent(pluck(data('counties_filter'), 'value'))"
+                  }
+               ],
+
+               "data": [
+                  {
+                     "name": "source_data",
+                     "values": dataset1,
+                     "async": true
+                  },
+                  {
+                     "name": "prod_data",
+                     "source": "source_data",
+                     "transform": [
+                        {
+                           "type": "aggregate",
+                           "groupby": ["fips"],
+                           "fields": ["prod"],
+                           "ops": ["sum"],
+                           "as": ["prod"]
+                        }
+                     ]
+                  },
+                  {
+                     "name": "source_transform",
+                     "source": "source_data",
+                     "transform": [
+                        {
+                           "type": "aggregate",
+                           "groupby": ["subclass", "region", "fips"],
+                           "fields": ["energ_pot", "tot_seq", "nutrient_pollution", "res_ins_proxy", "Rural Prosperity", "efficiency", "profit"],
+                           "ops": ["sum", "sum", "sum", "sum", "sum", "sum", "sum"],
+                           "as": ["Energy Potential", "Air Quality", "Water Quality", "Security", "Rural Prosperity", "Efficiency", "Profitability"]
+                        },
+                        {
+                           "type": "fold",
+                           "fields": ["Energy Potential", "Air Quality", "Water Quality", "Security", "Rural Prosperity", "Efficiency", "Profitability"]
+                        },
+                        {
+                           "type": "joinaggregate",
+                           "groupby": ["key"],
+                           "fields": ["value", "value"],
+                           "ops": ["min", "max"]
+                        },
+                        {
+                           "type": "formula",
+                           "expr": "(datum.value - datum.min_value)/(datum.max_value - datum.min_value)",
+                           "as": "normalized_value"
+                        },
+                        {
+                           "type": "formula",
+                           "expr": "datum.key == 'Water Quality' || datum.key == 'Security' ? 1 - datum.normalized_value : datum.normalized_value",
+                           "as": "normalized_value"
+                        },
+                        {
+                           "type": "formula",
+                           "expr": "datum.key == 'Air Quality' ? datum.normalized_value * bind_air : datum.key == 'Water Quality' ? datum.normalized_value * bind_water : datum.key == 'Energy Potential' ? datum.normalized_value * bind_potential : datum.key == 'Efficiency' ? datum.normalized_value * bind_efficiency : datum.key == 'Profitability' ? datum.normalized_value * bind_profit : datum.key == 'Security' ? datum.normalized_value * bind_resiliency :  datum.key == 'Rural Prosperity' ? datum.normalized_value * bind_prosperity : datum.normalized_value",
+                           "as": "weighted_value"
+                        },
+                     ]
+                  },
+                  {
+                     "name": "chart_data",
+                     "source": "source_transform",
+                     "transform": [
+                        {
+                           "type": "filter",
+                           "expr": "metric == 'Production (per sqmi)' ? datum : datum.key == metric"
+                        },
+                        {
+
+                           "type": "aggregate",
+                           "groupby": ["fips"],
+                           "fields": ["value", "normalized_value", "weighted_value", "subclass"],
+                           "ops": ["average", "average", "sum", "count"],
+                           "as": ["value", "normalized_value", "weighted_value", "subclass_count"]
+                        },
+                        {
+                           "type": "lookup",
+                           "from": "prod_data",
+                           "key": "fips",
+                           "fields": ["fips"],
+                           "values": [
+                              "prod"
+                           ]
+                        }
+                     ]
+                  },
+                  {
+                     "name": "map_data",
+                     "values": dataset2,
+                     "async": true
+                  },
+                  {
+                     "name": "counties_source",
+                     "values": dataset3,
+                     "format": { "type": "topojson", "feature": "counties" },
+                     "async": true,
+                     "transform": [
+                        {
+                           "type": "filter",
+                           "expr": "datum.id != 26000 && datum.id != 55000 && datum.id != 27000 && datum.id != 17000 && datum.id != 39000 && datum.id != 36000 && datum.id != 42000 && datum.id != 53000"
+                        },
+                        {
+                           "type": "lookup",
+                           "from": "map_data",
+                           "key": "fips",
+                           "fields": ["id"],
+                           "values": [
+                              "county",
+                              "state_name",
+                              "fips",
+                              "region",
+                              "sqmi"
+                           ]
+                        },
+                        {
+                           "type": "lookup",
+                           "from": "chart_data",
+                           "key": "fips",
+                           "fields": ["id"],
+                           "values": [
+                              "value",
+                              "normalized_value",
+                              "weighted_value",
+                              "prod"
+                           ]
+                        },
+                        {
+                           "type": "formula",
+                           "expr": "datum.prod / datum.sqmi",
+                           "as": "prod_sqmi"
+                        },
+                        {
+                           "type": "formula",
+                           "expr": "datum.weighted_value == 0 ? 1 * datum.prod_sqmi : datum.weighted_value * datum.prod_sqmi",
+                           "as": "weighted_prod"
+                        }
+                     ]
+                  },
+                  {
+                     "name": "counties_filter",
+                     "source": "counties_source",
+                     "transform": [
+                        {
+                           "type": "filter",
+                           "expr": "isValid(bind_region) ? datum.region == bind_region : datum.id == -9"
+                        }
+                     ]
+                  },
+                  {
+                     "name": "regions",
+                     "values": dataset4,
+                     "format": { "type": "topojson", "feature": "states" },
+                     "async": true,
+                     "transform": [
+                        {
+                           "type": "formula",
+                           "as": "centroid",
+                           "expr": "geoCentroid('projection', datum.geometry)"
+                        },
+                        {
+                           "type": "filter",
+                           "expr": "isValid(bind_region) ? datum.properties.region != bind_region : datum"
+                        }
+                     ]
+                  }
+               ],
+
+               "projections": [
+                  {
+                     "name": "projection",
+                     "type": "albersUsa"
+                  }
+               ],
+
+               "scales": [
+                  {
+                     "name": "color",
+                     "type": "quantize",
+                     "domain": [0, 1000],
+                     "range": { "scheme": "purples", "count": 5 }
+                  },
+                  {
+                     "name": "color_sec",
+                     "type": "quantize",
+                     "domain": 
+                        {"signal": "metric == 'Production (per sqmi)' ? [0, 1000] : extent(pluck(data('counties_filter'), 'value'))"},
+                     "range": { "scheme": "purples", "count": 5 }
+                  }
+               ],
+
+               "legends": [
+                  {
+                     "fill": "color_sec",
+                     "orient": "none",
+                     "legendX": 800,
+                     "legendY": 250,
+                     "title": "",
+                     "encode": {
+                        "title": {
+                           "update": {
+                              "text": {"signal":"metric"}                              
+                           }
+                        }
+                     }
+                  }
+               ],
+
+               "marks": [
+                  {
+                     "type": "shape",
+                     "name": "mark_counties_static",
+                     "from": { "data": "counties_filter" },
+                     "encode": {
+                        "update": {
+                           "fill": [
+                              {"test": "metric == 'Production (per sqmi)'", "scale": "color", "field": "prod_sqmi"},
+                              {"scale": "color_sec", "field": "value"}
+                           ],
+                           "stroke": { "value": "white" },
+                           "fillOpacity": { "signal": "isValid(bind_county) ? datum.fips == bind_county ? 1 : 0.25 : 1" }
+                        },
+                     },
+                     "transform": [
+                        { "type": "geoshape", "projection": "projection" }
+                     ]
+                  },
+                  {
+                     "type": "shape",
+                     "name": "mark_counties",
+                     "from": { "data": "counties_filter" },
+                     "encode": {
+                        "update": {
+                           "tooltip": { "signal": "{'Name': datum.county, 'FIPS': datum.fips, 'State': datum.state_name, 'Metric': format(datum.value, ',r'),'Weighted metric': format(datum.weighted_value, '.2f'), 'Production (dry tons)': format(datum.prod, ',r'), 'Prod/SQMI': format(datum.prod_sqmi, ',.1f'), 'Weighted Prod/SQMI': format(datum.weighted_prod, ',.1f')}" },
+                           "fill": { "value": "transparent" },
+                           "stroke": { "signal": "isValid(bind_county) ? datum.fips == bind_county ? 'red' : 'transparent' : 'transparent'" }
+                        },
+                        "hover": {
+                           "stroke": { "value": "red" }
+                        }
+                     },
+                     "transform": [
+                        { "type": "geoshape", "projection": "projection" }
+                     ]
+                  },
+                  {
+                     "type": "shape",
+                     "name": "mark_regions",
+                     "from": { "data": "regions" },
+                     "interactive": true,
+                     "encode": {
+                        "enter": {
+                           "stroke": { "value": "white" }
+                        },
+                        "update": {
+                           "fill": {
+                              "value": 'lightgrey'
+                           },
+                           "fillOpacity": { "value": .5 }
+                        },
+                        "hover": {
+                           "fillOpacity": { "value": 1 }
+                        },
+                     },
+                     "transform": [
+                        { "type": "geoshape", "projection": "projection" }
+                     ]
+                  },
+                  {
+                     "type": "text",
+                     "interactive": false,
+                     "from": { "data": "regions" },
+                     "encode": {
+                        "update": {
+                           "fontSize": { "value": 16 },
+                           "x": { "field": "centroid[0]" },
+                           "y": { "field": "centroid[1]" },
+                           "align": { "value": "center" },
+                           "baseline": { "value": "middle" },
+                           "fontWeight": { "value": "bold" },
+                           "fill": {
+                              "signal": "datum.properties.region == bind_region ? 'black' : 'grey'"
+                           },
+                           "text": { "field": "properties.region" }
+                        }
+                     }
+                  }
+               ]
+            };
+            var region = {
+               value: 'Select a region',
+               letMeKnow() {
+                  console.log(`The variable has changed to ${this.testVar}`);
+               },
+               get testVar() {
+                  return this.value;
+               },
+               set testVar(value) {
+                  if (value == null || value == 'None') {
+                     value = 'Select a region'
+                     this.value = value;
+                     val.textContent = value;
+                  }
+                  else {
+                     this.value = value;
+                     val.textContent = 'Weighted priorities for the ' + value;
+                  }
+                  this.letMeKnow();
+               }
+            }
+            var county = {
+               value: 'None',
+               letMeKnow() {
+                  console.log(`The variable has changed to ${this.testVar}`);
+               },
+               get testVar() {
+                  return this.value;
+               },
+               set testVar(value) {
+                  if (value == null || value == 'None') {
+                     value = 'None'
+                  }
+                  else {
+                     val.textContent = 'Weighted priorities for ' + value;
+                  }
+                  this.value = value;
+                  this.letMeKnow();
+               }
+            }
+            var vegaView1 = vegaEmbed("#vis", spec, { actions: false })
+               .then(result => {
+                  result.view.addSignalListener('bind_region', function (name, value) {
+                     region.testVar = value;
+                  });
+                  result.view.addSignalListener('bind_county', function (name, value) {
+                     county.testVar = value;
+                  });
+               })
+               .catch(console.warn);
+
+            var radar_spec = {
+               "$schema": "https://vega.github.io/schema/vega/v5.json",
+               "description": "A radar chart example, showing multiple dimensions in a radial layout.",
+               "width": 500,
+               "height": 500,
+               "padding": 80,
+               "autosize": { "type": "none", "contains": "padding" },
+
+               "signals": [
+                  {
+                     "name": "bind_region2",
+                     "value": "None"
+                  },
+                  {
+                     "name": "bind_county2",
+                     "value": "None"
+                  },
+                  { "name": "radius", "update": "width / 2" },
+                  {
+                     "name": "bind_air",
+                     "bind": {
+                        "element": "#air-range"
+                     }
+                  },
+                  {
+                     "name": "bind_water",
+                     "bind": {
+                        "element": "#water-range"
+                     }
+                  },
+                  {
+                     "name": "bind_potential",
+                     "bind": {
+                        "element": "#potential-range"
+                     }
+                  },
+                  {
+                     "name": "bind_efficiency",
+                     "bind": {
+                        "element": "#efficiency-range"
+                     }
+                  },
+                  {
+                     "name": "bind_profit",
+                     "bind": {
+                        "element": "#profit-range"
+                     }
+                  },
+                  {
+                     "name": "bind_resiliency",
+                     "bind": {
+                        "element": "#res-range"
+                     }
+                  },
+                  {
+                     "name": "bind_prosperity",
+                     "value": 0
+                  },
+                  {
+                     "name": "total_weights",
+                     "update": "toNumber(bind_air) + toNumber(bind_water) + toNumber(bind_potential) + toNumber(bind_efficiency) + toNumber(bind_profit) + toNumber(bind_resiliency) + toNumber(bind_prosperity)"
+                  },
+                  {
+                     "name": "selected_category",
+                     "value": null,
+                     "on": [
+                        {
+                           "events": "@category-line:click",
+                           "update": "datum.subclass",
+                           "force": true
+                        },
+                        {
+                           "events": "@legendSymbol:click, @legendLabel:click",
+                           "update": "datum.value",
+                           "force": true
+                        },
+                        {
+                           "events": "pointerup[!event.item]",
+                           "update": "null"
+                        }
+                     ]
+                  }
+               ],
+
+               "data": [
+                  {
+                     "name": "source_data",
+                     "values": dataset1,
+                     "async": true
+                  },
+                  {
+                     "name": "map_data",
+                     "values": dataset2,
+                     "async": true
+                  },
+                  {
+                     "name": "prod_data",
+                     "source": "source_data",
+                     "transform": [
+                        {
+                           "type": "filter",
+                           "expr": "bind_county2 != 'None' ? datum.fips == bind_county2 : datum"
+                        },
+                        {
+                           "type": "lookup",
+                           "from": "map_data",
+                           "key": "fips",
+                           "fields": ["fips"],
+                           "values": [
+                              "region",
+                              "sqmi"
+                           ]
+                        },
+                        {
+                           "type": "formula",
+                           "expr": "datum.prod / datum.sqmi",
+                           "as": "prod_sqmi"
+                        },
+                        {
+                           "type": "aggregate",
+                           "groupby": ["subclass", "region"],
+                           "fields": ["prod_sqmi"],
+                           "ops": ["sum"],
+                           "as": ["prod_sqmi"]
+                        },
+                        {
+                           "type": "filter",
+                           "expr": "datum.region == bind_region2"
+                        }
+                     ]
+                  },
+                  {
+                     "name": "table",
+                     "source": "source_data",
+                     "transform": [
+                        {
+                           "type": "filter",
+                           "expr": "bind_county2 != 'None' ? datum.fips == bind_county2 : datum"
+                        },
+                        {
+                           "type": "lookup",
+                           "from": "map_data",
+                           "key": "fips",
+                           "fields": ["fips"],
+                           "values": [
+                              "region"
+                           ]
+                        },
+                        {
+                           "type": "formula",
+                           "expr": "0",
+                           "as": "Rural Prosperity"
+                        },
+                        {
+                           "type": "aggregate",
+                           "groupby": ["subclass", "region", "fips"],
+                           "fields": ["energ_pot", "tot_seq", "nutrient_pollution", "res_ins_proxy", "Rural Prosperity", "efficiency", "profit"],
+                           "ops": ["sum", "sum", "sum", "sum", "sum", "sum", "sum"],
+                           "as": ["Energy Potential", "Air Quality", "Water Quality", "Security", "Rural Prosperity", "Efficiency", "Profitability"]
+                        },
+                        {
+                           "type": "fold",
+                           "fields": ["Energy Potential", "Air Quality", "Water Quality", "Security", "Rural Prosperity", "Efficiency", "Profitability"]
+                        },
+                        {
+                           "type": "filter",
+                           "expr": "datum.value >= 0"
+                        },
+                        {
+                           "type": "joinaggregate",
+                           "groupby": ["key"],
+                           "fields": ["value", "value"],
+                           "ops": ["min", "max"]
+                        },
+                        {
+                           "type": "filter",
+                           "expr": "datum.key != 'Rural Prosperity'"
+                        },
+                        {
+                           "type": "aggregate",
+                           "groupby": ["key", "subclass", "min_value", "max_value", "region"],
+                           "fields": ["value"],
+                           "ops": ["mean"],
+                           "as": ["value"]
+                        },
+                        {
+                           "type": "filter",
+                           "expr": "datum.region == bind_region2"
+                        },
+                        {
+                           "type": "formula",
+                           "expr": "(datum.value - datum.min_value)/(datum.max_value - datum.min_value) * 100",
+                           "as": "normalized_value"
+                        },
+                        {
+                           "type": "formula",
+                           "expr": "datum.key == 'Water Quality' || datum.key == 'Security' ? 100 - datum.normalized_value : datum.normalized_value",
+                           "as": "normalized_value"
+                        },
+                        {
+                           "type": "lookup",
+                           "from": "prod_data",
+                           "key": "subclass",
+                           "fields": ["subclass"],
+                           "values": [
+                              "prod_sqmi"
+                           ]
+                        },
+                        {
+                           "type": "formula",
+                           "expr": "datum.key == 'Air Quality' ? datum.normalized_value * bind_air : datum.key == 'Water Quality' ? datum.normalized_value * bind_water : datum.key == 'Energy Potential' ? datum.normalized_value * bind_potential : datum.key == 'Efficiency' ? datum.normalized_value * bind_efficiency : datum.key == 'Profitability' ? datum.normalized_value * bind_profit : datum.key == 'Security' ? datum.normalized_value * bind_resiliency :  datum.key == 'Rural Prosperity' ? datum.normalized_value * bind_prosperity : datum.normalized_value",
+                           "as": "weighted_value"
+                        },
+                        {
+                           "type": "formula",
+                           "expr": "datum.prod_sqmi * datum.weighted_value",
+                           "as": "prod_sqmi_weighted"
+                        },
+                        {
+                           "type": "collect",
+                           "sort": {
+                              "field": ["key"],
+                              "order": ["ascending"]
+                           }
+                        }
+                     ]
+                  },
+                  {
+                     "name": "keys",
+                     "source": "table",
+                     "transform": [
+                        {
+                           "type": "aggregate",
+                           "groupby": ["key"]
+                        },
+                        {
+                           "type": "collect",
+                           "sort": {
+                              "field": ["key"],
+                              "order": ["ascending"]
+                           }
+                        }
+                     ]
+                  }
+               ],
+
+               "scales": [
+                  {
+                     "name": "angular",
+                     "type": "point",
+                     "range": { "signal": "[-PI, PI]" },
+                     "padding": 0.5,
+                     "domain": { "data": "table", "field": "key" }
+                  },
+                  {
+                     "name": "radial",
+                     "type": "linear",
+                     "range": { "signal": "[0, radius]" },
+                     "zero": true,
+                     "nice": false,
+
+                     "domain": { "data": "table", "field": "weighted_value" }
+                  },
+                  {
+                     "name": "color",
+                     "type": "ordinal",
+                     "domain": ['Commodity crops', 'Energy crops, herbaceous', 'Energy crops, woody'],
+                     "range": ['#1f77b4', '#ff7f0e', '#2ca02c']
+                  }
+               ],
+
+               "encode": {
+                  "enter": {
+                     "x": { "signal": "radius" },
+                     "y": { "signal": "radius" }
+                  }
+               },
+
+               "legends": [
+                  {
+                     "name": "subclass",
+                     "orient": "none",
+                     "legendX": 85,
+                     "legendY": 130,
+                     "fill": "color",
+                     "encode": {
+                        "symbols": {
+                           "name": "legendSymbol",
+                           "interactive": true,
+                           "update": {
+                              "opacity": [
+                                 { "test": "!isValid(selected_category) || selected_category == datum.value", "value": 1 },
+                                 { "value": 0.15 }
+                              ],
+                              "size": { "value": 64 }
+                           }
+                        },
+                        "labels": {
+                           "name": "legendLabel",
+                           "interactive": true,
+                           "update": {
+                              "opacity": [
+                                 { "test": "!isValid(selected_category) || selected_category == datum.value", "value": 1 },
+                                 { "value": 0.25 }
+                              ]
+                           },
+                           "hover": {
+                              "opacity": { "value": 0.5 }
+                           }
+                        }
+                     }
+                  }
+               ],
+
+               "marks": [
+                  {
+                     "type": "group",
+                     "name": "categories",
+                     "zindex": 1,
+                     "from": {
+                        "facet": { "data": "table", "name": "facet", "groupby": ["subclass"] }
+                     },
+                     "marks": [
+                        {
+                           "type": "line",
+                           "name": "category-line",
+                           "from": { "data": "facet" },
+                           "encode": {
+                              "update": {
+                                 "tooltip": { "signal": "datum" },
+                                 "interpolate": { "value": "linear-closed" },
+                                 "x": { "signal": "scale('radial', datum.weighted_value) * cos(scale('angular', datum.key))" },
+                                 "y": { "signal": "scale('radial', datum.weighted_value) * sin(scale('angular', datum.key))" },
+                                 "stroke": { "scale": "color", "field": "subclass" },
+                                 "strokeWidth": { "value": 1 },
+                                 "fill": { "scale": "color", "field": "subclass" },
+                                 "fillOpacity": { "value": 0.1 }
+                              },
+                              "hover": {
+                                 "fillOpacity": { "value": 0.5 }
+                              }
+                           }
+                        },
+                        {
+                           "type": "text",
+                           "name": "value-text",
+                           "from": { "data": "category-line" },
+                           "encode": {
+                              "update": {
+                                 "x": { "signal": "datum.x" },
+                                 "y": { "signal": "datum.y" },
+                                 "text": { "signal": "datum.datum.subclass == selected_category ? format(datum.datum.weighted_value, ',.1f') : ''" },
+                                 "align": { "value": "center" },
+                                 "baseline": { "value": "middle" },
+                                 "fill": { "scale": "color", "field": "datum.subclass" },
+                                 "fontWeight": { "value": "bold" }
+                              }
+                           }
+                        }
+                     ]
+                  },
+                  {
+                     "type": "rule",
+                     "name": "radial-grid",
+                     "from": { "data": "keys" },
+                     "zindex": 0,
+                     "encode": {
+                        "update": {
+                           "x": { "value": 0 },
+                           "y": { "value": 0 },
+                           "x2": { "signal": "radius * cos(scale('angular', datum.key))" },
+                           "y2": { "signal": "radius * sin(scale('angular', datum.key))" },
+                           "stroke": { "value": "lightgray" },
+                           "strokeWidth": { "value": 1 }
+                        }
+                     }
+                  },
+                  {
+                     "type": "text",
+                     "name": "key-label",
+                     "from": { "data": "keys" },
+                     "zindex": 1,
+                     "encode": {
+                        "update": {
+                           "x": { "signal": "(radius + 5) * cos(scale('angular', datum.key))" },
+                           "y": { "signal": "(radius + 5) * sin(scale('angular', datum.key))" },
+                           "text": { "field": "key" },
+                           "limit": { "value": 100 },
+                           "align": [
+                              {
+                                 "test": "abs(scale('angular', datum.key)) > PI / 2",
+                                 "value": "right"
+                              },
+                              {
+                                 "value": "left"
+                              }
+                           ],
+                           "baseline": [
+                              {
+                                 "test": "scale('angular', datum.key) > 0", "value": "top"
+                              },
+                              {
+                                 "test": "scale('angular', datum.key) == 0", "value": "middle"
+                              },
+                              {
+                                 "value": "bottom"
+                              }
+                           ],
+                           "fill": { "value": "black" },
+                           "fontWeight": { "value": "bold" }
+                        }
+                     }
+                  },
+                  {
+                     "type": "line",
+                     "name": "outer-line",
+                     "from": { "data": "radial-grid" },
+                     "encode": {
+                        "enter": {
+                           "interpolate": { "value": "linear-closed" },
+                           "x": { "field": "x2" },
+                           "y": { "field": "y2" },
+                           "stroke": { "value": "lightgray" },
+                           "strokeWidth": { "value": 1 }
+                        }
+                     }
+                  }
+               ]
+            };
+            vega.scheme('basic', ['#1f77b4', '#ff7f0e', '#2ca02c']);
+            var vegaView2 = vegaEmbed("#radar_vis", radar_spec, { actions: false })
+               .then(result => {
+                  vis.addEventListener("click", function (event, item) {
+                     result.view.signal("bind_region2", region.value);
+                     result.view.signal("bind_county2", county.value);
+                     result.view.setState(result.view.getState('keys'));
+                     // console.log(result.view.signal('selected_category'));
+                     // console.log(result.view.data('table'));
+                  });
+
+
+               })
+               .catch(console.warn);
+
+            var chart_spec = {
+               "$schema": "https://vega.github.io/schema/vega/v5.json",
+               "description": "A basic bar chart example, with value labels shown upon pointer hover.",
+               "width": 200,
+               "height": 400,
+               "padding": 20,
+
+               "signals": [
+                  {
+                     "name": "bind_region2",
+                     "value": "None"
+                  },
+                  {
+                     "name": "bind_county2",
+                     "value": "None"
+                  },
+                  {
+                     "name": "bind_air",
+                     "bind": {
+                        "element": "#air-range"
+                     }
+                  },
+                  {
+                     "name": "bind_water",
+
+                     "bind": {
+                        "element": "#water-range"
+                     }
+                  },
+                  {
+                     "name": "bind_potential",
+                     "bind": {
+                        "element": "#potential-range"
+                     }
+                  },
+                  {
+                     "name": "bind_efficiency",
+                     "bind": {
+                        "element": "#efficiency-range"
+                     }
+                  },
+                  {
+                     "name": "bind_profit",
+                     "bind": {
+                        "element": "#profit-range"
+                     }
+                  },
+                  {
+                     "name": "bind_resiliency",
+                     "bind": {
+                        "element": "#res-range"
+                     }
+                  },
+                  {
+                     "name": "bind_prosperity",
+                     "value": 0
+                  },
+                  {
+                     "name": "total_weights",
+                     "update": "toNumber(bind_air) + toNumber(bind_water) + toNumber(bind_potential) + toNumber(bind_efficiency) + toNumber(bind_profit) + toNumber(bind_resiliency) + toNumber(bind_prosperity)"
+                  }
+               ],
+
+               "data": [
+                  {
+                     "name": "source_data",
+                     "values": dataset1,
+                     "async": true
+                  },
+                  {
+                     "name": "map_data",
+                     "values": dataset2,
+                     "async": true
+                  },
+                  {
+                     "name": "prod_data",
+                     "source": "source_data",
+                     "transform": [
+                        {
+                           "type": "filter",
+                           "expr": "bind_county2 != 'None' ? datum.fips == bind_county2 : datum"
+                        },
+                        {
+                           "type": "lookup",
+                           "from": "map_data",
+                           "key": "fips",
+                           "fields": ["fips"],
+                           "values": [
+                              "region",
+                              "sqmi"
+                           ]
+                        },
+                        {
+                           "type": "formula",
+                           "expr": "datum.prod / datum.sqmi",
+                           "as": "prod_sqmi"
+                        },
+                        {
+                           "type": "aggregate",
+                           "groupby": ["subclass", "region"],
+                           "fields": ["prod_sqmi"],
+                           "ops": ["sum"],
+                           "as": ["prod_sqmi"]
+                        },
+                        {
+                           "type": "filter",
+                           "expr": "datum.region == bind_region2"
+                        }
+                     ]
+                  },
+                  {
+                     "name": "table",
+                     "source": "source_data",
+                     "transform": [
+                        {
+                           "type": "lookup",
+                           "from": "map_data",
+                           "key": "fips",
+                           "fields": ["fips"],
+                           "values": [
+                              "region",
+                           ]
+                        },
+                        {
+                           "type": "formula",
+                           "expr": "0",
+                           "as": "Rural Prosperity"
+                        },
+                        {
+                           "type": "aggregate",
+                           "groupby": ["subclass", "region"],
+                           "fields": ["energ_pot", "tot_seq", "nutrient_pollution", "res_ins_proxy", "Rural Prosperity", "efficiency", "profit"],
+                           "ops": ["sum", "sum", "sum", "sum", "sum", "sum", "sum"],
+                           "as": ["Energy Potential", "Air Quality", "Water Quality", "Security", "Rural Prosperity", "Efficiency", "Profitability"]
+                        },
+                        {
+                           "type": "fold",
+                           "fields": ["Energy Potential", "Air Quality", "Water Quality", "Security", "Rural Prosperity", "Efficiency", "Profitability"]
+                        },
+                        {
+                           "type": "joinaggregate",
+                           "groupby": ["key"],
+                           "fields": ["value", "value"],
+                           "ops": ["min", "max"]
+                        },
+                        {
+                           "type": "aggregate",
+                           "groupby": ["key", "subclass", "min_value", "max_value", "region"],
+                           "fields": ["value"],
+                           "ops": ["max"],
+                           "as": ["value"]
+                        },
+                        {
+                           "type": "filter",
+                           "expr": "datum.region == bind_region2"
+                        },
+                        {
+                           "type": "formula",
+                           "expr": "(datum.value - datum.min_value)/(datum.max_value - datum.min_value)",
+                           "as": "normalized_value"
+                        },
+                        {
+                           "type": "formula",
+                           "expr": "datum.key == 'Water Quality' || datum.key == 'Security' ? 1 - datum.normalized_value : datum.normalized_value",
+                           "as": "normalized_value"
+                        },
+                        {
+                           "type": "formula",
+                           "expr": "datum.key == 'Air Quality' ? datum.normalized_value * bind_air : datum.key == 'Water Quality' ? datum.normalized_value * bind_water : datum.key == 'Energy Potential' ? datum.normalized_value * bind_potential : datum.key == 'Efficiency' ? datum.normalized_value * bind_efficiency : datum.key == 'Profitability' ? datum.normalized_value * bind_profit : datum.key == 'Security' ? datum.normalized_value * bind_resiliency :  datum.key == 'Rural Prosperity' ? datum.normalized_value * bind_prosperity : datum.normalized_value",
+                           "as": "weighted_value"
+                        },
+                        {
+                           "type": "aggregate",
+                           "groupby": ["subclass"],
+                           "fields": ["weighted_value"],
+                           "ops": ["sum"],
+                           "as": ["weighted_value"]
+                        },
+                        {
+                           "type": "lookup",
+                           "from": "prod_data",
+                           "key": "subclass",
+                           "fields": ["subclass"],
+                           "values": [
+                              "prod_sqmi"
+                           ]
+                        },
+                        {
+                           "type": "formula",
+                           "expr": "datum.prod_sqmi * datum.weighted_value",
+                           "as": "prod_sqmi_weighted"
+                        },
+                        {
+                           "type": "fold",
+                           "fields": ["prod_sqmi", "prod_sqmi_weighted"]
+                        },
+                        {
+                           "type": "formula",
+                           "expr": "datum.key == 'prod_sqmi' ? 'Prod/SQMI': 'Prod/SQMI (weighted)'",
+                           "as": "key"
+                        },
+                        {
+                           "type": "stack",
+                           "groupby": ["key"],
+                           "sort": { "field": "subclass" },
+                           "field": "value"
+                        }
+                     ]
+                  }
+               ],
+
+               "scales": [
+                  {
+                     "name": "xscale",
+                     "type": "band",
+                     "domain": { "data": "table", "field": "key" },
+                     "range": "width",
+                     "padding": 0.5,
+                     "round": true
+                  },
+                  {
+                     "name": "yscale",
+                     "type": "linear",
+                     "domain": { "data": "table", "field": "y1" },
+                     "nice": true,
+                     "zero": true,
+                     "range": [{ "signal": "height * 0.75" }, 0]
+                  },
+                  {
+                     "name": "color",
+                     "type": "ordinal",
+                     "domain": ['Commodity crops', 'Energy crops, herbaceous', 'Energy crops, woody'],
+                     "range": ['#1f77b4', '#ff7f0e', '#2ca02c']
+                  }
+               ],
+
+               "axes": [
+                  { "orient": "bottom", "scale": "xscale", "ticks": false, "labelAngle": 45, "labelAlign": "left", "offset": { "signal": "height * -0.25" } },
+                  { "orient": "left", "scale": "yscale", "ticks": false, "domain": false, "labels": false }
+               ],
+
+               "marks": [
+                  {
+                     "type": "rect",
+                     "from": { "data": "table" },
+                     "encode": {
+                        "update": {
+                           "tooltip": { "signal": "format(datum.value, ',.0f')" },
+                           "fill": { "scale": "color", "field": "subclass" },
+                           "fillOpacity": { "value": 0.1 },
+                           "stroke": { "scale": "color", "field": "subclass" },
+                           "strokeOpacity": { "value": 0.5 },
+                           "x": { "scale": "xscale", "field": "key" },
+                           "width": { "scale": "xscale", "band": 1 },
+                           "y": { "scale": "yscale", "field": "y0" },
+                           "y2": { "scale": "yscale", "field": "y1" }
+                        },
+                        "hover": {
+                           "fillOpacity": { "value": 0.5 },
+                        }
+                     }
+                  },
+                  {
+                     "type": "text",
+                     "from": { "data": "table" },
+                     "encode": {
+                        "update": {
+                           "text": { "signal": "format(datum.value, ',.0f')" },
+                           "fontWeight": { "value": "bold" },
+                           "align": { "signal": "datum.subclass == 'Energy crops, herbaceous' ? datum.key == 'Prod/SQMI' ? 'right' : 'left' : 'center'" },
+                           "baseline": { "signal": "datum.subclass == 'Energy crops, woody' ? 'bottom' : datum.subclass == 'Energy crops, herbaceous' ? 'middle' : 'top'" },
+                           "dy": { "signal": "datum.subclass == 'Energy crops, woody' ? -3 : 3" },
+                           "dx": { "signal": "datum.subclass == 'Energy crops, herbaceous' ? datum.key == 'Prod/SQMI' ? -5 : 45 : 20" },
+                           "width": { "scale": "xscale", "band": 1 },
+                           "fill": { "scale": "color", "field": "subclass" },
+                           "x": { "scale": "xscale", "field": "key" },
+                           "y": { "scale": "yscale", "field": "y1" }
+                        }
+                     }
+                  }
+               ]
+            }
+            var vegaView3 = vegaEmbed("#chart_vis", chart_spec, { actions: false })
+               .then(result => {
+                  vis.addEventListener("click", function (event, item) {
+                     result.view.signal("bind_region2", region.value);
+                     result.view.signal("bind_county2", county.value);
+                     result.view.setState(result.view.getState('signals'));
+                     // console.log(result.view.data('table'));
+                  });
+                  // console.log(result.view.data("source_data"));
+                  // console.log(result.view.data("table"));
+               })
+         });
+
+      };
+      genVisualization();
+   </script>
+   </div>
+</body>
+
+</html>
